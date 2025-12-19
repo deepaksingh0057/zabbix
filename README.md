@@ -21,11 +21,12 @@ python tracker.py --state state.json summary
 
 `--state` controls where the JSON state is stored (defaults to `state.json`).
 
-To run the small web UI with connection testing and charts, install Flask (`pip install flask`) and start the server:
+To run the small web UI with connection testing and charts (no extra dependencies required), start the server:
 
 ```bash
 python tracker.py --state sample_state.json serve --host 0.0.0.0 --port 5000
 # Visit http://localhost:5000 to enter your Zabbix server details and see the charts.
+# The UI is self-contained and works offline.
 ```
 
 ## Commands
