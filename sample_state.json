@@ -1,0 +1,58 @@
+{
+  "hosts": [
+    {
+      "name": "core-router",
+      "type": "snmp",
+      "status": "active",
+      "added_at": "2024-06-01T10:00:00Z",
+      "deleted_at": null
+    },
+    {
+      "name": "db-agent",
+      "type": "agent",
+      "status": "active",
+      "added_at": "2024-06-02T09:30:00Z",
+      "deleted_at": null
+    },
+    {
+      "name": "legacy-switch",
+      "type": "snmp",
+      "status": "deleted",
+      "added_at": "2024-05-29T08:15:00Z",
+      "deleted_at": "2024-06-03T12:00:00Z"
+    }
+  ],
+  "alarms": [
+    {
+      "id": 1,
+      "host": "core-router",
+      "severity": "high",
+      "message": "Interface Gi0/1 down",
+      "acknowledged": true,
+      "resolved": false,
+      "created_at": "2024-06-10T13:00:00Z",
+      "resolved_at": null
+    },
+    {
+      "id": 2,
+      "host": "db-agent",
+      "severity": "warning",
+      "message": "Disk usage 85%",
+      "acknowledged": false,
+      "resolved": false,
+      "created_at": "2024-06-10T14:45:00Z",
+      "resolved_at": null
+    },
+    {
+      "id": 3,
+      "host": "core-router",
+      "severity": "high",
+      "message": "CPU usage normalized",
+      "acknowledged": true,
+      "resolved": true,
+      "created_at": "2024-06-09T11:20:00Z",
+      "resolved_at": "2024-06-09T11:50:00Z"
+    }
+  ],
+  "next_alarm_id": 4
+}
