@@ -21,6 +21,13 @@ python tracker.py --state state.json summary
 
 `--state` controls where the JSON state is stored (defaults to `state.json`).
 
+To run the small web UI with connection testing and charts, install Flask (`pip install flask`) and start the server:
+
+```bash
+python tracker.py --state sample_state.json serve --host 0.0.0.0 --port 5000
+# Visit http://localhost:5000 to enter your Zabbix server details and see the charts.
+```
+
 ## Commands
 
 - `add-host <name> <snmp|agent>` — register a new host.
@@ -29,6 +36,7 @@ python tracker.py --state state.json summary
 - `ack <alarm_id>` — mark an alarm as acknowledged.
 - `resolve <alarm_id>` — mark an alarm as resolved.
 - `check-connection --server-url <url> [--api-token TOKEN | --user USER --password PASS]` — verify you can reach the Zabbix JSON-RPC API (and optionally log in).
+- `serve [--host HOST] [--port PORT]` — launch a simple web UI with a connection form and charts that visualize the local state.
 - `summary` — show present alarms, acknowledged/unacknowledged breakdown, resolved alarms, and host inventory (including SNMP vs. agent and deleted hosts).
 
 ## Connecting to a Zabbix server

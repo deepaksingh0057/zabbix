@@ -9,6 +9,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from flask import Flask
+
 
 Timestamp = str
 
@@ -260,6 +265,173 @@ class ZabbixConnectionTester:
         }
 
 
+def build_app(tracker: ZabbixTracker) -> "Flask":
+    from flask import Flask, jsonify, render_template_string, request, url_for
+
+    app = Flask(__name__)
+
+    @app.route("/api/summary")
+    def summary_api() -> object:
+        report = tracker.summary()
+        return jsonify(report)
+
+    @app.route("/api/check-connection", methods=["POST"])
+    def check_connection_api() -> object:
+        payload = request.get_json(force=True, silent=True) or {}
+        server_url = payload.get("serverUrl")
+        token = payload.get("apiToken")
+        username = payload.get("user")
+        password = payload.get("password")
+        timeout = float(payload.get("timeout")) if payload.get("timeout") else 10.0
+
+        if not server_url:
+            return jsonify({"ok": False, "message": "serverUrl is required"}), 400
+
+        tester = ZabbixConnectionTester(
+            server_url=server_url,
+            username=username,
+            password=password,
+            token=token,
+            timeout=timeout,
+        )
+        try:
+            result = tester.check()
+            message = "Authenticated" if result["used_auth"] else "Reached server without authentication"
+            return jsonify({"ok": True, "message": message, "result": result})
+        except Exception as exc:  # pragma: no cover - network errors are runtime-only
+            return jsonify({"ok": False, "message": str(exc)}), 502
+
+    @app.route("/")
+    def index() -> str:
+        return render_template_string(
+            """
+            <!doctype html>
+            <html lang="en">
+            <head>
+                <meta charset="utf-8">
+                <title>Zabbix helper UI</title>
+                <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+                <style>
+                    body { font-family: sans-serif; margin: 2rem; }
+                    .panel { border: 1px solid #ddd; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; }
+                    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
+                    label { display: block; margin-top: 0.5rem; }
+                    input { width: 100%; padding: 0.5rem; }
+                    button { margin-top: 0.75rem; padding: 0.5rem 1rem; }
+                    pre { background: #f7f7f7; padding: 0.75rem; border-radius: 4px; overflow: auto; }
+                </style>
+            </head>
+            <body>
+                <h1>Zabbix connection & alarm overview</h1>
+                <div class="grid">
+                    <div class="panel">
+                        <h2>Check Zabbix connection</h2>
+                        <label>Server URL<input id="serverUrl" placeholder="https://zabbix.example.com"></label>
+                        <label>API token<input id="apiToken" placeholder="Optional token"></label>
+                        <label>Username<input id="user" placeholder="Admin"></label>
+                        <label>Password<input id="password" type="password" placeholder="zabbix"></label>
+                        <label>Timeout (seconds)<input id="timeout" type="number" step="0.1" value="10"></label>
+                        <button onclick="checkConnection()">Check connection</button>
+                        <pre id="connectionResult">Waiting for input…</pre>
+                    </div>
+                    <div class="panel">
+                        <h2>Alarm breakdown</h2>
+                        <canvas id="alarmChart" width="400" height="300"></canvas>
+                    </div>
+                    <div class="panel">
+                        <h2>Hosts</h2>
+                        <canvas id="hostChart" width="400" height="300"></canvas>
+                    </div>
+                </div>
+                <script>
+                    async function fetchSummary() {
+                        const response = await fetch("{{ url_for('summary_api') }}");
+                        const data = await response.json();
+                        return data;
+                    }
+
+                    function buildCharts(report) {
+                        const alarmCtx = document.getElementById('alarmChart');
+                        const hostCtx = document.getElementById('hostChart');
+
+                        const present = report.present_alarms.length;
+                        const acknowledged = report.acknowledged_alarms.length;
+                        const unack = report.unacknowledged_alarms.length;
+                        const resolved = report.resolved_alarms.length;
+
+                        new Chart(alarmCtx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Acknowledged', 'Unacknowledged', 'Resolved'],
+                                datasets: [{
+                                    data: [acknowledged, unack, resolved],
+                                    backgroundColor: ['#36a2eb', '#ff6384', '#7cd992'],
+                                }]
+                            },
+                            options: { plugins: { legend: { position: 'bottom' } } }
+                        });
+
+                        const snmp = report.snmp_hosts.length;
+                        const agent = report.agent_hosts.length;
+                        const deleted = report.deleted_hosts.length;
+
+                        new Chart(hostCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: ['SNMP', 'Agent', 'Deleted'],
+                                datasets: [{
+                                    label: 'Hosts',
+                                    data: [snmp, agent, deleted],
+                                    backgroundColor: ['#4bc0c0', '#9966ff', '#c9cbcf'],
+                                }]
+                            },
+                            options: {
+                                plugins: { legend: { display: false } },
+                                scales: { y: { beginAtZero: true } }
+                            }
+                        });
+                    }
+
+                    async function checkConnection() {
+                        const payload = {
+                            serverUrl: document.getElementById('serverUrl').value,
+                            apiToken: document.getElementById('apiToken').value,
+                            user: document.getElementById('user').value,
+                            password: document.getElementById('password').value,
+                            timeout: document.getElementById('timeout').value,
+                        };
+                        const resultEl = document.getElementById('connectionResult');
+                        resultEl.textContent = 'Checking…';
+                        try {
+                            const response = await fetch("{{ url_for('check_connection_api') }}", {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload),
+                            });
+                            const data = await response.json();
+                            if (data.ok) {
+                                resultEl.textContent = JSON.stringify(data.result, null, 2);
+                            } else {
+                                resultEl.textContent = 'Error: ' + data.message;
+                            }
+                        } catch (err) {
+                            resultEl.textContent = 'Error: ' + err;
+                        }
+                    }
+
+                    fetchSummary().then(buildCharts).catch(err => {
+                        const resultEl = document.getElementById('connectionResult');
+                        resultEl.textContent = 'Failed to load summary: ' + err;
+                    });
+                </script>
+            </body>
+            </html>
+            """
+        )
+
+    return app
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Track Zabbix alarms and hosts locally.")
     parser.add_argument(
@@ -303,6 +475,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="HTTP timeout in seconds (default: 10)",
     )
 
+    serve_parser = subparsers.add_parser(
+        "serve", help="Start a small web UI for connection checks and charts"
+    )
+    serve_parser.add_argument("--host", default="0.0.0.0", help="Listen host")
+    serve_parser.add_argument("--port", type=int, default=5000, help="Listen port")
+
     subparsers.add_parser("summary", help="Print a summary report")
 
     return parser
@@ -343,6 +521,9 @@ def main() -> None:
             print("Authentication successful; verified API call with credentials/token.")
         else:
             print("No authentication provided; server reachable without login.")
+    elif args.command == "serve":
+        app = build_app(tracker)
+        app.run(host=args.host, port=args.port)
     elif args.command == "summary":
         tracker.print_summary()
 
